@@ -63,12 +63,12 @@ def generar_csv(tabla, cifras: int) -> bytes:
     output = io.StringIO()
     writer = csv.writer(output)
 
-    writer.writerow(['n', 'R(n)', 'R(n)^2', 'M.R(n)^2', 'u'])
+    writer.writerow(['R(n)', 'R(n)^2', 'M.R(n)^2', 'u'])
 
     for r in tabla:
         u = r['medio'] / modulus
         writer.writerow(
-            [r['n'], r['Rn'], r['Rn2'], r['medio'], f"{u:.6f}"]
+            [r['Rn'], r['Rn2'], r['medio'], f"{u:.6f}"]
         )
 
     return output.getvalue().encode("utf-8")
