@@ -1,12 +1,11 @@
-from flask import Flask, render_template, request, send_file
 import io
 import csv
 
-app = Flask(__name__)
+import streamlit as st
+import pandas as pd
 
 
 class GeneradorNumerosPseudoaleatorios:
-
     def __init__(self, semilla, cifras):
         self.semilla = semilla
         self.cifras = cifras
@@ -29,6 +28,7 @@ class GeneradorNumerosPseudoaleatorios:
             rn2 = rn * rn
             s = str(rn2)
 
+            # Ajuste de longitud para que la extracción del centro sea consistente
             if (len(s) % 2 == 0 and self.cifras % 2 != 0) or \
                (len(s) % 2 != 0 and self.cifras % 2 == 0):
                 s = "0" + s
@@ -57,48 +57,90 @@ class GeneradorNumerosPseudoaleatorios:
         return [r['medio'] for r in self.tabla]
 
 
-@app.route('/')
-def index():
-    return render_template('index.html')
+def generar_csv(tabla, cifras: int) -> bytes:
+    """Genera el CSV en memoria a partir de la tabla."""
+    modulus = 10 ** cifras
+    output = io.StringIO()
+    writer = csv.writer(output)
+
+    writer.writerow(['n', 'R(n)', 'R(n)^2', 'M.R(n)^2', 'u'])
+
+    for r in tabla:
+        u = r['medio'] / modulus
+        writer.writerow(
+            [r['n'], r['Rn'], r['Rn2'], r['medio'], f"{u:.6f}"]
+        )
+
+    return output.getvalue().encode("utf-8")
 
 
-@app.route('/generar', methods=['POST'])
-def generar():
-    try:
-        semilla = int(request.form['semilla'])
-        cifras = int(request.form['cifras'])
+def main():
+    st.title("Generador de números pseudoaleatorios")
+    st.subheader("Método del cuadrado medio")
 
-        if cifras <= 0:
-            return "Error: El número de cifras debe ser mayor a 0", 400
+    st.markdown(
+        """
+        Ingresa una **semilla entera** y el **número de cifras** que se usarán
+        para generar la secuencia de números pseudoaleatorios mediante el método
+        del cuadrado medio.
+        """
+    )
 
-        generador = GeneradorNumerosPseudoaleatorios(semilla, cifras)
+    # Entradas del usuario
+    semilla = st.number_input(
+        "Semilla inicial (entero)",
+        min_value=0,
+        value=1234,
+        step=1,
+        format="%d"
+    )
+
+    cifras = st.number_input(
+        "Número de cifras",
+        min_value=1,
+        value=4,
+        step=1,
+        format="%d"
+    )
+
+    if st.button("Generar secuencia"):
+        generador = GeneradorNumerosPseudoaleatorios(int(semilla), int(cifras))
         tabla = generador.procedimiento_cuadrado_medio()
 
         if len(tabla) >= 10000:
-            return "Advertencia: La secuencia alcanzó el límite máximo de 10,000 iteraciones y fue truncada para evitar un ciclo infinito.", 400
+            st.warning(
+                "La secuencia alcanzó el límite máximo de 10,000 iteraciones "
+                "y puede haber sido truncada para evitar un ciclo infinito."
+            )
 
-        output = io.StringIO()
-        writer = csv.writer(output)
+        modulus = 10 ** int(cifras)
 
-        modulus = 10**cifras
-        writer.writerow(['n', 'R(n)', 'R(n)^2', 'M.R(n)^2', 'u'])
+        # Convertir la tabla a DataFrame para mostrarla
+        df = pd.DataFrame(
+            [
+                {
+                    "n": r["n"],
+                    "R(n)": r["Rn"],
+                    "R(n)^2": r["Rn2"],
+                    "M.R(n)^2": r["medio"],
+                    "u": r["medio"] / modulus
+                }
+                for r in tabla
+            ]
+        )
 
-        for r in tabla:
-            u = r['medio'] / modulus
-            writer.writerow(
-                [r['n'], r['Rn'], r['Rn2'], r['medio'], f"{u:.6f}"])
+        st.subheader("Tabla generada")
+        st.dataframe(df, use_container_width=True)
 
-        output.seek(0)
-        return send_file(io.BytesIO(output.getvalue().encode()),
-                         mimetype='text/csv',
-                         as_attachment=True,
-                         download_name='cuadrado_medio.csv')
-
-    except ValueError:
-        return "Error: Por favor ingresa valores numéricos válidos", 400
-    except Exception as e:
-        return f"Error: {str(e)}", 500
+        # Botón para descargar el CSV
+        csv_bytes = generar_csv(tabla, int(cifras))
+        st.download_button(
+            label="📥 Descargar CSV",
+            data=csv_bytes,
+            file_name="cuadrado_medio.csv",
+            mime="text/csv"
+        )
 
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=False)
+if __name__ == "__main__":
+    main()
